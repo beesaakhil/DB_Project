@@ -1,0 +1,215 @@
+
+import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
+
+table = pd.read_csv(r"C:\Users\mprav\Downloads\exampleInputTable.csv")
+
+
+###################  Entering all inputs  #######################
+
+Functional_dependencies = {}
+
+inp = input('Enter first Functional Dependency in format x, y -> a, b. if nothing more type exit:  ')
+
+while inp != 'exit':
+    for item in inp.split(' -> ')[1].split(', '):
+        Functional_dependencies[item] = inp.split(' -> ')[0].split(', ')
+    inp = input('Enter Next Dependency in format x, y -> a, b. if nothing more type exit:  ')
+
+
+MultiValued_dependencies = {}
+
+inp = input('\n\nEnter first MultiValued Dependency in format x, y ->> a, b. if nothing more type exit:  ')
+
+while inp != 'exit':
+    for item in inp.split(' ->> ')[1].split(', '):
+        MultiValued_dependencies[item] = inp.split(' ->> ')[0].split(', ')
+    inp = input('Enter Next MultiValued Dependency in format x, y ->> a, b. if nothing more type exit:  ')
+    
+    
+step = int(input("\nChoice of the highest normal form to reach(1:1Nf,2:2NF,3:3NF,4:BCNF,5:4NF):   "))
+
+current = int(input("\nFind the highest normal form of the input table? (1: Yes, 2: No):   "))
+
+key = input('\nEnter the key:  ')
+
+key = key.split(', ')
+
+'''
+unq = False
+
+for column in table.columns:
+    if table[column].is_unique:
+        unq = True
+'''
+
+
+###################  First Normal Form  #######################
+atomicity = True      
+
+for i in range(len(table)):
+    for column in table.columns:
+        if ', ' in str(table[column][i]):
+            atomicity = False
+
+if current == 1:
+    if atomicity:
+        print('\nThe given table satisfies 1NF')
+    else:
+        print('\nThe table fails 1NF')
+
+
+if current == 1:
+    if len(key) == 1:
+        print('\nThe given table satisfies 2NF')
+    
+    if len(key) > 1 and atomicity:
+        print('\nThe given table is in 1NF')
+    
+
+###################  Second Normal Form  #######################
+
+if step > 1:
+    if len(key) > 1:
+        num = 1
+        x = len(key)
+        tables = {}
+        for i in range(1 << x):
+            lst = [key[j] for j in range(x) if (i & (1 << j))]
+            if lst != []:
+                if len(lst) == 1:
+                    unq_vals = table[lst[0]].unique()
+                    tables[num] = pd.DataFrame(unq_vals, columns=lst)
+                else:
+                    tables[num] = table[lst]
+                num += 1
+        
+        cols = table.columns
+        remain = [i for i in cols if i not in key]
+        remain_copy = remain
+        
+        for val in range(1,num-1):
+            main_col = list(tables[val].columns)
+            for col in [k for k, v in Functional_dependencies.items() if v == main_col]:
+                tables[val][col] = ''
+                remain.remove(col)
+                for i in range(len(tables[val])):
+                    temp = table[table[main_col[0]]==tables[val][main_col[0]][i]][col]
+                    temp = temp.reset_index()
+                    tables[val][col][i] = temp[col][0]
+        
+        for col in remain:
+            main_col = list(tables[num-1].columns)
+            tables[num-1][col] = ''
+            for i in range(len(tables[num-1])):
+                temp = table.loc[(table[main_col[0]]==tables[num-1][main_col[0]][i]) & (table[main_col[1]]==tables[num-1][main_col[1]][i])][col]
+                temp = temp.reset_index()
+                tables[num-1][col][i] = temp[col][0]
+        
+
+'''
+for i in range(1,num):
+    print('The tables in 2NF are:')
+    print(tables[i])
+'''
+
+###################  Third Normal Form  #######################
+
+if step > 2:
+    if len(key) == 2:
+        for col in remain_copy:
+            try:
+                if Functional_dependencies[col][0] in remain_copy:
+                    tables[3] = tables[3].drop([col], axis=1)
+                    tables[num] = table[Functional_dependencies[col]]
+                    tables[num][col] = ''
+                    remain_copy.remove(col)
+                    for i in range(len(tables[num])):
+                        tables[num][col][i] = table[col][i]
+                    tables[num] = tables[num].drop_duplicates()
+                    tables[num] = tables[num].reset_index()
+                    tables[num] = tables[num].drop(columns = ['index'])
+                    num += 1
+            except:
+                x = 1
+
+
+###################  Boyce Codd Normal Form  #######################
+
+if step > 3:
+    if len(key) == 2:
+        for col in remain_copy:
+            try:
+                if Functional_dependencies[col] != key:
+                    tables[3] = tables[3].drop([col], axis=1)
+                    tables[num] = table[Functional_dependencies[col]]
+                    tables[num][col] = ''
+                    remain_copy.remove(col)
+                    for i in range(len(tables[num])):
+                        tables[num][col][i] = table[col][i]
+                    tables[num] = tables[num].drop_duplicates()
+                    tables[num] = tables[num].reset_index()
+                    tables[num] = tables[num].drop(columns = ['index'])
+                    num += 1
+            except:
+                x = 1
+
+
+
+###################  Fourth Normal Form  #######################
+
+if step > 4:
+    for i in range(1,len(tables)+1):
+        tables[i].drop_duplicates()
+        tables[i] = tables[i].reset_index()
+        tables[i] = tables[i].drop(columns = ['index'])
+        print('\n\tTable ', i, ' is:')
+        print(tables[i])
+
+
+###################  Printing Table creating Queries  #######################
+
+if step == 1 and atomicity:
+    print('CREATE TABLE table1 (')
+    for col in table.columns:
+        print(col, end='')
+        try:
+            if table[col][0].is_integer():
+                print(' INT', end ='')
+        except:
+            x = 1
+        if isinstance(table[col][0], str):
+            if '/' in table[col][0]:
+                print(' DATE', end ='')
+            else:
+                print(' VARCHAR(255)', end ='')
+        if col == tables[i].columns[0] and table[col].is_unique:
+            print(' PRIMARY KEY', end ='')
+        
+        print(',')
+    print(');')
+
+if step > 1:
+    print('\nThe queries to create normalized tables are: ')  
+         
+    for i in range(1,len(tables)+1):
+        print('CREATE TABLE table',i, ' (')
+        for col in tables[i].columns:
+            print(col, end='')
+            try:
+                if tables[i][col][0].is_integer():
+                    print(' INT', end ='')
+            except:
+                x = 1
+            if isinstance(tables[i][col][0], str):
+                if '/' in tables[i][col][0]:
+                    print(' DATE', end ='')
+                else:
+                    print(' VARCHAR(255)', end ='')
+            if col == tables[i].columns[0] and tables[i][col].is_unique:
+                print(' PRIMARY KEY', end ='')
+            
+            print(',')
+        print(');')
+    
